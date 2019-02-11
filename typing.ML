@@ -18,10 +18,11 @@ sig
   val typing_all: Proof.context -> jmt list
 
   val get_typing_in: term -> jmt list -> term option
+
   val get_local_typing: Proof.context -> term -> term option
 
-  val get_declared_typing: theory -> term -> term option
-  val put_declared_typing: term -> theory -> theory
+  val put_theory_typing: term -> theory -> theory
+  val get_theory_typing: theory -> term -> term option
 
   val get_typing: Proof.context -> term -> term option
 end
@@ -45,10 +46,10 @@ fun type_of_jmt (@{const HoTT_Base.has_type} $ _ $ T) = T
 (* Get typing assumptions in "this" *)
 fun typing_this ctxt = Util.get_this ctxt |> map Thm.prop_of |> filter is_typing_jmt
 
-(* Get the typing assumptions in the current context *)
+(* Get the typing assumptions in the current proof context *)
 val typing_assms = Util.get_assms #> map Thm.prop_of #> filter is_typing_jmt
 
-(* Get all visible typing judgments—Quick hack for now; should record them separately *)
+(* Search the context and return all visible typing judgments *)
 fun typing_all ctxt =
   Util.get_all_thms ctxt |> map (Thm.prop_of o snd) |> filter is_typing_jmt
 
@@ -84,36 +85,28 @@ fun get_local_typing ctxt tm =
     NONE => get_typing_in tm (typing_assms ctxt)
   | res => res
 
-(* Storage space for declared typings *)
-structure Declared_Typings = Theory_Data
+(* Dedicated theory data for proven typing judgments *)
+structure Theory_Typings = Theory_Data
 (
   type T = term Symtab.table
   val empty = Symtab.empty
   val extend = I
-  val merge = K Symtab.empty
-)
+  val merge = Symtab.join (fn key => fn (x, y) => y)
+)                                                         
 (* Accessor for the above data *)
-fun get_declared_typing thy tm =
-  case tm of
-    (Free (v, _)) => Symtab.lookup (Declared_Typings.get thy) v
-  | _ => NONE
+fun get_theory_typing thy tm =
+  Symtab.lookup (Theory_Typings.get thy) (Util.string_of_term tm)
 
-(* Store new typing information for free variables only
-   (constants should have their types declared at the moment of definition).
-   End users should use the "typing" keyword instead.
-*)
-fun put_declared_typing jmt =
+fun put_theory_typing jmt =
   case jmt of
     Const("HoTT_Base.has_type", _) $ term $ typing =>
-      (case term of
-        Free (v, _) => Declared_Typings.map (Symtab.update (v, typing))
-      | _ => Exn.error "Cannot declare typing assumption (not a free variable)")
+      Theory_Typings.map (Symtab.update (Util.string_of_term term, typing))
   | _ => Exn.error "Not a typing judgment"
 
 (* Get the typing of a term *)
 fun get_typing ctxt tm =
   case get_local_typing ctxt tm of
-    NONE => get_declared_typing (Proof_Context.theory_of ctxt) tm
+    NONE => get_theory_typing (Proof_Context.theory_of ctxt) tm
   | res => res
 
 end

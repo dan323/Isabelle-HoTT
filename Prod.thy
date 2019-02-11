@@ -125,4 +125,19 @@ by (derive lems: assms cong)
 
 abbreviation id :: "t \<Rightarrow> t" where "id A \<equiv> \<lambda>x: A. x"
 
+lemma assumes "A: U i" "f: A \<rightarrow>B " "g: B \<rightarrow> C" shows "compose A g f: A \<rightarrow> C"
+by (derive lems: assms)
+
+lemma*
+  assumes "f: F"
+  shows
+    test: "\<lbrakk>A: U i; f: A \<rightarrow> B; g: B \<rightarrow> C\<rbrakk> \<Longrightarrow> g o f: A \<rightarrow> C"
+          "y: Y"
+  and
+    test2: "z: Z"
+proof -
+  assume "A: U i" "f: A \<rightarrow> B" "g: B \<rightarrow> C"
+  show "g o f: A \<rightarrow> C"
+oops
+
 end
