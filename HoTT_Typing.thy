@@ -1,11 +1,40 @@
 (********
-Isabelle/HoTT: typing.ML
+Isabelle/HoTT: Core typing judgment form and associated automation
 Feb 2019
 
-Functionality for object-level type inference.
+This file is the starting point of the definition of Isabelle/HoTT.
+It declares the fundamental typing judgment form and sets up various
+ML functionality to automate type inference.
 
 ********)
 
+theory HoTT_Typing
+imports Pure
+keywords "assume_type" "assume_types" :: thy_decl
+
+begin
+
+
+section \<open>Initial settings\<close>
+
+declare[[eta_contract=false]] \<comment> \<open>Do not eta-contract\<close>
+
+ML \<open>val trace = Attrib.setup_config_bool @{binding "trace"} (K false)\<close>
+  \<comment> \<open>Context attribute for tracing; use declare[[trace=true]] at any point in a theory to turn on.\<close>
+
+
+section \<open>Terms and typing\<close>
+
+typedecl t \<comment> \<open>Type of object-logic terms (which includes the types)\<close>
+
+judgment has_type :: "[t, t] \<Rightarrow> prop"  ("(3_:/ _)")
+
+
+section \<open>Typing functionality\<close>
+
+ML_file "util.ML"
+
+ML \<open>
 signature TYPING =
 sig
   type jmt = term
@@ -33,14 +62,14 @@ struct
 type jmt = term
 
 (* Determine if a term is a typing judgment *)
-fun is_typing_jmt (@{const HoTT_Base.has_type} $ _ $ _) = true
+fun is_typing_jmt (@{const has_type} $ _ $ _) = true
   | is_typing_jmt _ = false
 
 (* Functions to extract a and A from propositions "a: A" *)
-fun term_of_jmt (@{const HoTT_Base.has_type} $ t $ _) = t
+fun term_of_jmt (@{const has_type} $ t $ _) = t
   | term_of_jmt _ = Exn.error "Not a typing judgment"
 
-fun type_of_jmt (@{const HoTT_Base.has_type} $ _ $ T) = T
+fun type_of_jmt (@{const has_type} $ _ $ T) = T
   | type_of_jmt _ = Exn.error "Not a typing judgment"
 
 (* Get typing assumptions in "this" *)
@@ -108,5 +137,33 @@ fun get_typing ctxt tm =
   case get_local_typing ctxt tm of
     NONE => get_theory_typing (Proof_Context.theory_of ctxt) tm
   | res => res
+
+end
+\<close>
+
+ML \<open>
+val _ =
+  let
+    fun store_typing ctxt = Typing.put_theory_typing o (Syntax.read_prop ctxt)
+  in
+    Outer_Syntax.local_theory
+      @{command_keyword "assume_type"}
+      "Declare typing assumptions"
+      (Parse.prop >>
+        (fn prop => fn lthy => Local_Theory.background_theory (store_typing lthy prop) lthy))
+  end
+
+val _ =
+  let
+    val parser = Parse.and_list (Parse.prop)
+    fun store_typings ctxt = fold (Typing.put_theory_typing o (Syntax.read_prop ctxt))
+  in
+    Outer_Syntax.local_theory
+      @{command_keyword "assume_types"}
+      "Declare typing assumptions"
+      (parser >>
+        (fn props => fn lthy => Local_Theory.background_theory (store_typings lthy props) lthy))
+  end
+\<close>
 
 end
